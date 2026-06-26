@@ -116,19 +116,12 @@ class SudokuGame:
     def is_valid_move(self, row, col, num):
         if num == 0:
             return True
-        # Check against the solution to be strict, or just check conflicts
-        # A simple conflict check is often better for a player experience
-        temp = self.board[row][col]
-        self.board[row][col] = 0
-        safe = self._is_safe(self.board, row, col, num)
-        self.board[row][col] = temp
-        return safe
+        # Strict validation: Check directly against the true mathematical solution
+        return self.solution[row][col] == num
 
     def check_win(self):
         for i in range(9):
             for j in range(9):
-                if self.board[i][j] == 0:
-                    return False
-                if not self._is_safe(self.board, i, j, self.board[i][j]):
+                if self.board[i][j] != self.solution[i][j]:
                     return False
         return True

@@ -6,6 +6,8 @@ from textual.reactive import reactive
 from rich.table import Table
 from rich.text import Text
 from rich import box
+from rich.console import Console
+import io
 from game import SudokuGame
 
 LARGE_DIGITS = {
@@ -27,8 +29,119 @@ THEMES = {
     "dracula": {"bg": "#282A36", "fg": "#F8F8F2", "heavy": "#BD93F9", "fixed": "#50FA7B", "sel": "#44475A"}
 }
 
+class StopwatchWidget(Static):
+    start_time = reactive(0.0)
+    running = reactive(False)
+    elapsed_time = reactive(0.0)
+
+    def on_mount(self) -> None:
+        self.update_timer = self.set_interval(1 / 10, self.update_time, pause=True)
+
+    def update_time(self) -> None:
+        if self.running:
+            self.elapsed_time = time.time() - self.start_time
+
+    def start(self) -> None:
+        self.start_time = time.time()
+        self.running = True
+        self.update_timer.resume()
+
+    def stop(self) -> None:
+        if self.running:
+            self.running = False
+            self.update_timer.pause()
+            self.elapsed_time = time.time() - self.start_time
+        
+    def reset(self) -> None:
+        self.running = False
+        self.update_timer.pause()
+        self.elapsed_time = 0.0
+
+    def get_large_time(self, mins: int, secs: int) -> str:
+        digits = {
+            '1': [" ╻ ", " ┃ ", " ╹ "],
+            '2': ["╺━┓", "┏━┛", "┗━╸"],
+            '3': ["╺━┓", "╺━┫", "╺━┛"],
+            '4': ["╻ ╻", "┗━┫", "  ╹"],
+            '5': ["┏━╸", "┗━┓", "╺━┛"],
+            '6': ["┏━╸", "┣━┓", "┗━┛"],
+            '7': ["╺━┓", "  ┃", "  ╹"],
+            '8': ["┏━┓", "┣━┫", "┗━┛"],
+            '9': ["┏━┓", "┗━┫", "╺━┛"],
+            '0': ["┏━┓", "┃ ┃", "┗━┛"],
+            ':': [" ", "•", "•"]
+        }
+        
+        time_str = f"{mins:02d}:{secs:02d}"
+        lines = ["", "", ""]
+        for i in range(3):
+            lines[i] = " ".join(digits[char][i] for char in time_str)
+        
+        return "\n".join(lines)
+
+    def render(self) -> str:
+        mins, secs = divmod(int(self.elapsed_time), 60)
+        large_time = self.get_large_time(mins, secs)
+        return f"[b]⏱  Time:[/b]\n[#FFFFFF]{large_time}[/]"
+
 class BoardWidget(Static):
+    def start_snake(self):
+        buf = io.StringIO()
+        console = Console(file=buf, force_terminal=True, color_system="truecolor", width=120)
+        console.print(self.render_table())
+        ansi_str = buf.getvalue()
+        
+        t = Text.from_ansi(ansi_str)
+        self.cached_lines = [line for line in t.split("\n") if len(line) > 0]
+        
+        height = len(self.cached_lines)
+        width = len(self.cached_lines[0]) if height > 0 else 0
+        
+        self.perimeter = []
+        for c in range(width): self.perimeter.append((0, c))
+        for r in range(1, height): self.perimeter.append((r, width - 1))
+        for c in range(width - 2, -1, -1): self.perimeter.append((height - 1, c))
+        for r in range(height - 2, 0, -1): self.perimeter.append((r, 0))
+            
+        self.animating = True
+        self.snake_pos = 0
+        self.snake_timer = self.set_interval(0.015, self.update_snake)
+
+    def update_snake(self):
+        self.snake_pos += 1
+        if self.snake_pos > len(self.perimeter) + 20:
+            self.snake_timer.stop()
+        self.refresh()
+
     def render(self):
+        if getattr(self, 'animating', False):
+            import copy
+            lines = copy.deepcopy(self.cached_lines)
+            snake_head = self.snake_pos
+            snake_tail = max(0, snake_head - 10)
+            
+            snake_cells = set()
+            for p in range(snake_tail, snake_head):
+                if 0 <= p < len(self.perimeter):
+                    snake_cells.add(self.perimeter[p])
+                    
+            traversed = set()
+            for p in range(0, snake_head):
+                if 0 <= p < len(self.perimeter):
+                    traversed.add(self.perimeter[p])
+            
+            theme = THEMES[self.app.current_theme_name]
+            for r, c in traversed:
+                if 0 <= r < len(lines) and 0 <= c < len(lines[r]):
+                    if (r, c) in snake_cells:
+                        lines[r].stylize("bold #FFFFFF", c, c+1)
+                    else:
+                        lines[r].stylize(f"bold {theme['heavy']}", c, c+1)
+            
+            return Text("\n").join(lines)
+        return self.render_table()
+
+    def render_table(self):
         theme = THEMES[self.app.current_theme_name]
         heavy_color = theme["heavy"]
         bg_color = theme["bg"]
@@ -124,11 +237,18 @@ class SudokuApp(App):
         align: center middle;
     }
     
-    #controls, #theme-controls {
+    #theme-controls {
+        dock: right;
+        width: 14;
+        height: auto;
+        margin: 1;
+    }
+
+    #controls {
         height: 3;
+        width: 100%;
         align: center middle;
         margin-bottom: 1;
-        width: auto;
     }
     
     Button {
@@ -137,6 +257,25 @@ class SudokuApp(App):
         min-width: 12;
     }
     
+    #board-container {
+        align: center middle;
+        height: auto;
+        width: 100%;
+    }
+    
+    #left-spacer { width: 24; }
+    #board-and-status { height: auto; align: left top; }
+    #timer-container { width: 24; height: auto; align: center top; }
+    .timer-btn { margin-top: 1; width: 100%; }
+    #stopwatch {
+        width: 24;
+        height: 7;
+        content-align: center middle;
+        background: #222222;
+        color: #E0E0E0;
+        border: solid #888888;
+    }
+
     BoardWidget {
         width: auto;
         height: auto;
@@ -145,7 +284,8 @@ class SudokuApp(App):
     #status-label {
         text-style: bold;
         margin: 1 0;
-        text-align: center;
+        text-align: left;
+        width: 100%;
     }
 
     .theme-peach { background: #111111; color: #E0E0E0; }
@@ -154,6 +294,7 @@ class SudokuApp(App):
     .theme-peach Button:hover { background: #333333; }
     .theme-peach Button.active { background: #CC7766; color: #111111; text-style: bold; }
     .theme-peach #status-label { color: #CC7766; }
+    .theme-peach #stopwatch { border: solid #CC7766; background: #222222; color: #CC7766; }
 
     .theme-blue { background: #0A111A; color: #E0E0E0; }
     .theme-blue Header { background: #5588CC; color: #0A111A; }
@@ -161,6 +302,7 @@ class SudokuApp(App):
     .theme-blue Button:hover { background: #1A334D; }
     .theme-blue Button.active { background: #5588CC; color: #0A111A; text-style: bold; }
     .theme-blue #status-label { color: #5588CC; }
+    .theme-blue #stopwatch { border: solid #5588CC; background: #112233; color: #5588CC; }
 
     .theme-green { background: #0F1A13; color: #E0E0E0; }
     .theme-green Header { background: #55AA77; color: #0F1A13; }
@@ -168,6 +310,7 @@ class SudokuApp(App):
     .theme-green Button:hover { background: #1E3E2B; }
     .theme-green Button.active { background: #55AA77; color: #0F1A13; text-style: bold; }
     .theme-green #status-label { color: #55AA77; }
+    .theme-green #stopwatch { border: solid #55AA77; background: #152A1D; color: #55AA77; }
 
     .theme-dracula { background: #282A36; color: #F8F8F2; }
     .theme-dracula Header { background: #FF79C6; color: #282A36; }
@@ -175,6 +318,7 @@ class SudokuApp(App):
     .theme-dracula Button:hover { background: #6272A4; color: #F8F8F2; }
     .theme-dracula Button.active { background: #FF79C6; color: #282A36; text-style: bold; }
     .theme-dracula #status-label { color: #8BE9FD; }
+    .theme-dracula #stopwatch { border: solid #FF79C6; background: #44475A; color: #FF79C6; }
     """
     
     BINDINGS = [
@@ -200,10 +344,22 @@ class SudokuApp(App):
     notes_mode = reactive(False)
     current_theme_name = "peach"
 
+    def on_resize(self, event) -> None:
+        try:
+            is_large = event.size.height >= 46
+            board_width = 79 if is_large else 43
+            self.query_one("#board-and-status").styles.width = board_width
+            
+            # Vertically center the stopwatch relative to the board
+            stopwatch_margin = 16 if is_large else 7
+            self.query_one("#timer-container").styles.margin = (stopwatch_margin, 0, 0, 0)
+        except:
+            pass
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Vertical(id="main-container"):
-            with Horizontal(id="theme-controls"):
+            with Vertical(id="theme-controls"):
                 yield Button("Peach", id="theme-peach")
                 yield Button("Blue", id="theme-blue")
                 yield Button("Green", id="theme-green")
@@ -215,8 +371,14 @@ class SudokuApp(App):
                 yield Button("Expert", id="btn-expert")
                 yield Button("Notes: OFF", id="btn-notes")
             
-            yield BoardWidget()
-            yield Label("", id="status-label")
+            with Horizontal(id="board-container"):
+                yield Static(id="left-spacer")
+                with Vertical(id="board-and-status"):
+                    yield BoardWidget()
+                    yield Label("", id="status-label")
+                with Vertical(id="timer-container"):
+                    yield StopwatchWidget(id="stopwatch")
+                    yield Button("Start", id="btn-start", classes="timer-btn")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -259,6 +421,10 @@ class SudokuApp(App):
                 btn.remove_class("active")
 
     def start_game(self, difficulty: str) -> None:
+        board = self.query_one(BoardWidget)
+        board.animating = False
+        board.styles.visibility = "visible"
+        self.query_one("#stopwatch").reset()
         self.update_difficulty_buttons(difficulty)
         self.game.generate(difficulty)
         self.start_time = time.time()
@@ -305,6 +471,23 @@ class SudokuApp(App):
     def action_toggle_notes(self) -> None:
         self.notes_mode = not self.notes_mode
 
+    def start_win_animation(self) -> None:
+        self.blink_count = 0
+        self.blink_timer = self.set_interval(0.3, self.do_blink)
+
+    def do_blink(self) -> None:
+        board = self.query_one(BoardWidget)
+        if self.blink_count % 2 == 0:
+            board.styles.visibility = "hidden"
+        else:
+            board.styles.visibility = "visible"
+        self.blink_count += 1
+        
+        if self.blink_count >= 4:
+            self.blink_timer.stop()
+            board.styles.visibility = "visible"
+            board.start_snake()
+
     def action_input(self, digit: str) -> None:
         if self.selected_row == -1 or self.selected_col == -1:
             return
@@ -337,14 +520,16 @@ class SudokuApp(App):
                 cell['error'] = not is_valid
                 
                 if self.game.check_win():
-                    elapsed = int(time.time() - self.start_time)
-                    mins, secs = divmod(elapsed, 60)
-                    self.query_one("#status-label").update(f"🎉 YOU WIN! Time: {mins}m {secs}s 🎉 Select a difficulty to play again.")
+                    self.query_one("#stopwatch").stop()
+                    self.query_one("#status-label").update(f"🎉 YOU WIN! 🎉 Select a difficulty to play again.")
+                    self.start_win_animation()
         
         self.query_one(BoardWidget).refresh()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-notes":
+        if event.button.id == "btn-start":
+            self.query_one("#stopwatch").start()
+        elif event.button.id == "btn-notes":
             self.action_toggle_notes()
         elif event.button.id and event.button.id.startswith("btn-"):
             diff = event.button.id.split("-")[1]
