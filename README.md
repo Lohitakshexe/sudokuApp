@@ -2,6 +2,16 @@
 
 A beautifully crafted, fully playable Sudoku game built entirely for the terminal using Python, Textual, and Rich.
 
+---
+
+### 📸 Screenshots
+
+| Large Display Mode (Peach Theme) | Compact Grid Mode (Responsive Layout) |
+|:---:|:---:|
+| ![Large Display Mode](assets/screenshot_peach.png) | ![Compact Grid Mode](assets/screenshot_compact.png) |
+
+---
+
 ## ✨ Features
 
 - **Gorgeous UI**: A mathematically precise 7-segment digital display for digits and a spreadsheet-like contiguous grid layout.
