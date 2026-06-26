@@ -80,14 +80,38 @@ class SudokuGame:
                     return False
         return True
 
+    def _count_solutions(self, board, count=0):
+        for row in range(9):
+            for col in range(9):
+                if board[row][col] == 0:
+                    for num in range(1, 10):
+                        if self._is_safe(board, row, col, num):
+                            board[row][col] = num
+                            count = self._count_solutions(board, count)
+                            board[row][col] = 0
+                            if count > 1:
+                                return count
+                    return count
+        return count + 1
+
     def _remove_cells(self, count):
-        while count > 0:
-            cellId = random.randint(0, 80)
+        cells = list(range(81))
+        random.shuffle(cells)
+        removed = 0
+        for cellId in cells:
+            if removed >= count:
+                break
             i = cellId // 9
             j = cellId % 9
             if self.board[i][j] != 0:
+                temp = self.board[i][j]
                 self.board[i][j] = 0
-                count -= 1
+                
+                # Check if there is still a unique solution
+                if self._count_solutions(self.board, 0) == 1:
+                    removed += 1
+                else:
+                    self.board[i][j] = temp
 
     def is_valid_move(self, row, col, num):
         if num == 0:
