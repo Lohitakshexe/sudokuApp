@@ -6,7 +6,7 @@ A beautifully crafted, fully playable Sudoku game built entirely for the termina
 
 ### 📸 Screenshots
 
-| Large Display Mode (Peach Theme) | Compact Grid Mode (Responsive Layout) |
+| SudokuApp (Peach Theme)
 |:---:|:---:|
 | ![SudokuApp](assets/screenshot_peach.png)
 
