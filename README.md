@@ -8,7 +8,7 @@ A beautifully crafted, fully playable Sudoku game built entirely for the termina
 
 | Large Display Mode (Peach Theme) | Compact Grid Mode (Responsive Layout) |
 |:---:|:---:|
-| ![Large Display Mode](assets/screenshot_peach.png) | ![Compact Grid Mode](assets/screenshot_compact.png) |
+| ![SudokuApp](assets/screenshot_peach.png)
 
 ---
 
