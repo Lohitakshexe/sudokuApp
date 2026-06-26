@@ -37,14 +37,16 @@ class BoardWidget(Static):
         sel_color = theme["sel"]
         err_color = "#FFFFFF on #883333"
 
+        use_large = self.app.size.height >= 46
+
         outer = Table(show_header=False, box=box.HEAVY, padding=(0,0), style=heavy_color, show_lines=True)
         for _ in range(3): outer.add_column()
 
         for br in range(3):
             row_tables = []
             for bc in range(3):
-                inner = Table(show_header=False, box=box.SQUARE, padding=(0,0), style="#444444", show_lines=True)
-                for _ in range(3): inner.add_column(width=7, justify="center")
+                inner = Table(show_header=False, box=box.SQUARE, padding=(0,0), style="#444444", show_lines=use_large)
+                for _ in range(3): inner.add_column(width=7 if use_large else 3, justify="center")
 
                 for r in range(3):
                     cells_render = []
@@ -63,22 +65,32 @@ class BoardWidget(Static):
                             c_style = f"{fg_color} on {bg_color}"
 
                         if cell_data['value'] != 0:
-                            content = LARGE_DIGITS[cell_data['value']]
+                            if use_large:
+                                content = LARGE_DIGITS[cell_data['value']]
+                            else:
+                                content = str(cell_data['value'])
                         elif cell_data['notes']:
-                            lines = []
-                            for nr in range(3):
-                                line = ""
-                                for nc in range(3):
-                                    n = nr * 3 + nc + 1
-                                    line += str(n) if n in cell_data['notes'] else " "
-                                    if nc < 2: line += " "
-                                lines.append(line)
-                            content = "\n".join(lines)
+                            if use_large:
+                                lines = []
+                                for nr in range(3):
+                                    line = ""
+                                    for nc in range(3):
+                                        n = nr * 3 + nc + 1
+                                        line += str(n) if n in cell_data['notes'] else " "
+                                        if nc < 2: line += " "
+                                    lines.append(line)
+                                content = "\n".join(lines)
+                            else:
+                                notes_str = "".join(str(n) for n in sorted(cell_data['notes']))
+                                if len(notes_str) > 3:
+                                    content = notes_str[:2] + "."
+                                else:
+                                    content = notes_str
                             c_style = f"#888888 on {sel_color if cell_data['selected'] else bg_color}"
                         else:
-                            content = "    \n    \n    "
+                            content = " \n \n " if use_large else " "
 
-                        cells_render.append(Text(content, style=c_style, justify="center"))
+                        cells_render.append(Text(content, style=c_style, justify="center", no_wrap=True))
                     inner.add_row(*cells_render)
                 row_tables.append(inner)
             outer.add_row(*row_tables)
@@ -86,8 +98,13 @@ class BoardWidget(Static):
         return outer
 
     def on_click(self, event) -> None:
-        col = self._get_index(event.x, [2, 10, 18, 28, 36, 44, 54, 62, 70], 7)
-        row = self._get_index(event.y, [2, 6, 10, 16, 20, 24, 30, 34, 38], 3)
+        use_large = self.app.size.height >= 46
+        if use_large:
+            col = self._get_index(event.x, [2, 10, 18, 28, 36, 44, 54, 62, 70], 7)
+            row = self._get_index(event.y, [2, 6, 10, 16, 20, 24, 30, 34, 38], 3)
+        else:
+            col = self._get_index(event.x, [2, 6, 10, 16, 20, 24, 30, 34, 38], 3)
+            row = self._get_index(event.y, [2, 3, 4, 8, 9, 10, 14, 15, 16], 1)
         if row is not None and col is not None:
             self.app.select_cell(row, col)
 
@@ -121,8 +138,8 @@ class SudokuApp(App):
     }
     
     BoardWidget {
-        width: 79;
-        height: 43;
+        width: auto;
+        height: auto;
     }
     
     #status-label {
